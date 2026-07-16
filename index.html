@@ -1686,7 +1686,7 @@ function mulaiDeteksiWajah(){
       new faceapi.TinyFaceDetectorOptions()
     );
 
-    wajahTerdeteksi = hasil ? true : false;
+    if (hasil) {wajahTerdeteksi = cekPosisiWajah(hasil);} else {wajahTerdeteksi = false;}
 
     updateTombolWajah(wajahTerdeteksi);
 
@@ -1713,6 +1713,27 @@ function updateTombolWajah(status){
     tombol.innerHTML = "Posisikan Wajah";
 
   }
+
+}
+function cekPosisiWajah(hasil){
+
+  const box = hasil.box;
+
+  const tengahX = box.x + (box.width / 2);
+  const tengahY = box.y + (box.height / 2);
+
+  const kiri   = (DOM.video.videoWidth  - 176) / 2;
+  const kanan  = kiri + 176;
+
+  const atas   = (DOM.video.videoHeight * 0.43) - (218 / 2);
+  const bawah  = atas + 218;
+
+  return (
+    tengahX >= kiri &&
+    tengahX <= kanan &&
+    tengahY >= atas &&
+    tengahY <= bawah
+  );
 
 }
   /* MEDIA */
