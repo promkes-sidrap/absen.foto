@@ -329,6 +329,38 @@
       margin-bottom: 10px;
       text-align: right;
     }
+    .summary-info{
+    display:flex;
+    align-items:flex-start;
+    gap:16px;
+    margin:16px 0;
+}
+
+.summary-thumb{
+    flex:0 0 110px;
+    display:flex;
+    justify-content:center;
+}
+
+.summary-thumb img{
+    width:110px;
+    height:110px;
+    border-radius:50%;
+    object-fit:cover;
+    border:4px solid #fff;
+    box-shadow:0 4px 10px rgba(0,0,0,.18);
+}
+
+.summary-content{
+    flex:1;
+    min-width:0;
+}
+
+.summary-content .title{
+    margin-top:4px;
+    margin-bottom:10px;
+}
+
   </style>
 </head>
 <body>
@@ -410,8 +442,17 @@
         <!-- Summary Datang Tetap Dipertahankan -->
         <div id="absenDatangSummary" class="absen-summary hidden">
           <span class="badge">ABSEN DATANG TERCATAT</span>
-          <div class="title" id="summaryDatangTitle">-</div>
-          <div class="text" id="summaryDatangText">-</div>
+
+          <div class="summary-info">
+  <div class="summary-thumb hidden" id="summaryThumbContainer">
+    <img id="summaryThumb" alt="Foto Pegawai">
+  </div>
+
+  <div class="summary-content">
+    <div class="title" id="summaryDatangTitle">-</div>
+    <div class="text" id="summaryDatangText">-</div>
+  </div>
+</div>
           <div class="spirit">Selamat bekerja, semoga tugas hari ini lancar dan bernilai ibadah.</div>
           <button type="button" class="btn-main" data-action="start-checkout">ABSENSI PULANG</button>
         </div>
@@ -614,7 +655,7 @@
      KONFIGURASI
   ========================================================= */
   const CONFIG = {
-    WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwjH5F1zXLimXJFbS4cV861G1Viap5sIHHUkHBkBDA3TuBQvz4n1to4dl8jJ2_CvqeFog/exec',
+    WEB_APP_URL: 'https://script.google.com/macros/s/AKfycby1H2Klg2I0jdV1uTRdscNoSEDbmWD7FvYGKEpJ-89uuDLez4jw4b6i407vXXI1Sq_f/exec',
     SHARED_SECRET: 'absn_lawawoi_2026',
     ADMIN_IDS: ['198001022005021003','197211112005021003','198404152010012029','199509282024212015'],
     MODE_UJI_COBA: true,
@@ -710,7 +751,7 @@
       'adminTanggalFilter', 'adminTotal', 'adminHadir', 'adminDinas', 'adminTidakHadir', 'adminBelum', 'adminDetail', 'copyToast',
       'btnTabHarian', 'btnTabBulanan', 'adminHarianArea', 'adminBulananArea', 'rekapBulan', 'rekapTahun', 'rekapPegawai',
       'rekapBulananInfo', 'rekapBulananTable', 'btnTampilkanRekap',
-      'absenDatangSummary', 'summaryDatangTitle', 'summaryDatangText',
+      'absenDatangSummary', 'summaryThumbContainer', 'summaryThumb', 'summaryDatangTitle', 'summaryDatangText',
       'formAbsensiFields', 'labelDetailAbsen', 'labelKeterangan', 'btnMulaiAbsen',
       'runningTextWrap', 'runningTextTrack', 'btnTabPengumuman', 'adminPengumumanArea',
       'inputPengumumanBaru', 'pengumumanList', 'pengumumanCounter', 'formAbsensiTitle', 'noteFormAbsensi',
@@ -1088,6 +1129,8 @@ jamPulangNormal(detailAbsen) {
         longitude: this.normCoord(row.longitude),
         accuracy: row.accuracy || '',
         timestampClient: row.timestampClient || row.timestampServer || new Date().toISOString(),
+        linkFoto: row.linkFoto || '',
+        fotoBase64: row.fotoBase64 || '',
         tanggalTugas: String(row.tanggal || '').slice(0, 10) || STORAGE.todayKey()
       };
     },
@@ -1499,7 +1542,6 @@ cekAbsenPulangKadaluarsa(dataDatang) {
         pulang: null,
         expired: false
       };
-console.log(JSON.stringify(row, null, 2));
       // 1. Prioritaskan record hari ini
       const soalTanggal = row && (row.tanggal || row.tanggalTugas || row.timestampClient || row.timestampServer || '');
 const isServerHariIni = row && this.isTanggalHariIni(soalTanggal);
@@ -1719,6 +1761,9 @@ function cekPosisiWajah(hasil){
 
   const box = hasil.box;
 
+  const ukuranMinimal = 175;   // bisa disesuaikan nanti
+const ukuranMaksimal = 240;  // agar tidak terlalu dekat
+
   const tengahX = box.x + (box.width / 2);
   const tengahY = box.y + (box.height / 2);
 
@@ -1729,11 +1774,13 @@ function cekPosisiWajah(hasil){
   const bawah  = atas + 218;
 
   return (
-    tengahX >= kiri &&
-    tengahX <= kanan &&
-    tengahY >= atas &&
-    tengahY <= bawah
-  );
+  tengahX >= kiri &&
+  tengahX <= kanan &&
+  tengahY >= atas &&
+  tengahY <= bawah &&
+  box.width >= ukuranMinimal &&
+  box.width <= ukuranMaksimal
+);
 
 }
   /* MEDIA */
@@ -1749,13 +1796,17 @@ function cekPosisiWajah(hasil){
       if (!DOM.video || !DOM.canvas) throw new Error('Elemen kamera belum siap.');
       const vw = DOM.video.videoWidth||640, vh = DOM.video.videoHeight||480;
       const out = Math.min(CONFIG.FOTO_MAX_WIDTH, 280);
-      const crop = Math.min(vw, vh);
-      const cx = Math.max(0, Math.round((vw-crop)/2));
-      const cy0 = Math.round((vh-crop)/2);
-      const cy = Math.max(0, cy0 - Math.round(vh*0.10));
+      // Crop sedikit lebih dekat agar wajah lebih dominan
+const crop = Math.round(Math.min(vw, vh) * 0.88);
+
+const cx = Math.max(0, Math.round((vw - crop) / 2));
+
+const cy0 = Math.round((vh - crop) / 2);
+const cy = Math.max(0, cy0 - Math.round(crop * 0.06));
       const cyf = Math.min(cy, Math.max(0, vh-crop));
       DOM.canvas.width = out; DOM.canvas.height = out;
       const ctx = DOM.canvas.getContext('2d');
+      ctx.filter = "brightness(1.05) contrast(1.08)";
       ctx.translate(out, 0); ctx.scale(-1, 1);
       ctx.drawImage(DOM.video, cx, cyf, crop, crop, 0, 0, out, out);
       STATE.fotoBase64 = DOM.canvas.toDataURL('image/jpeg', CONFIG.FOTO_QUALITY);
@@ -1975,9 +2026,6 @@ function cekPosisiWajah(hasil){
     // Alur UI Utama Murni Menggunakan STATE Terpusat
     renderStatusHariIni() {
 
-console.log("STATE.absensiHariIni =", STATE.absensiHariIni);
-console.log("stateHariIni =", STATE.absensiHariIni.status);
-
       this.hide(DOM.absenDatangSummary);
       this.show(DOM.formAbsensiFields);
       this.hide(DOM.infoSelesaiAbsen);
@@ -2019,12 +2067,45 @@ console.log("stateHariIni =", STATE.absensiHariIni.status);
       }
     },
     tampilkanRingkasanDatang(d) {
-      if (!d) return;
-      if (DOM.summaryDatangTitle) DOM.summaryDatangTitle.textContent = d.detailAbsen||d.detail||'Dinas';
-      if (DOM.summaryDatangText) DOM.summaryDatangText.textContent = ENGINE.teksRingkasanDatang(d);
-      this.show(DOM.absenDatangSummary);
-      this.hide(DOM.formAbsensiFields);
-    },
+  if (!d) return;
+
+  if (DOM.summaryDatangTitle)
+    DOM.summaryDatangTitle.textContent = d.detailAbsen || d.detail || 'Dinas';
+
+  if (DOM.summaryDatangText)
+    DOM.summaryDatangText.textContent = ENGINE.teksRingkasanDatang(d);
+
+  // Tampilkan thumbnail jika ada
+if (DOM.summaryThumbContainer && DOM.summaryThumb) {
+
+  const foto = d.linkFoto || d.fotoBase64;
+
+  if (foto) {
+
+    let urlFoto = foto;
+
+    // Jika foto dari Google Drive, ubah ke thumbnail
+    if (foto.includes("drive.google.com")) {
+      const id = foto.match(/id=([^&]+)/)?.[1];
+      if (id) {
+        urlFoto = `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+      }
+    }
+
+    DOM.summaryThumb.src = urlFoto;
+    DOM.summaryThumbContainer.classList.remove("hidden");
+
+  } else {
+
+    DOM.summaryThumb.src = "";
+    DOM.summaryThumbContainer.classList.add("hidden");
+
+  }
+}
+
+  this.show(DOM.absenDatangSummary);
+  this.hide(DOM.formAbsensiFields);
+},
 
     // Tampilkan Informasi Akhir Absen Tanpa Summary Pulang Terpisah
     tampilkanSelesaiAbsenHariIni() {
@@ -2052,6 +2133,8 @@ console.log("stateHariIni =", STATE.absensiHariIni.status);
 
     const d = stateObj.datang || {};
     const p = stateObj.pulang || {};
+    const fotoDatang = d.linkFoto || d.fotoBase64 || '';
+    const fotoPulang = p.linkFoto || p.fotoBase64 || '';
 
     const tanggalTugas =
       d.timestampClient
@@ -2095,28 +2178,55 @@ console.log("stateHariIni =", STATE.absensiHariIni.status);
         : '-';
 
     content = `
-      <strong>Tugas / Dinas:</strong> ${detail || '-'}<br>
 
-      <strong>Tanggal Tugas:</strong> ${tanggalTugas}<br>
+<div class="summary-card">
 
-      <strong>Absen Datang:</strong>
-      ${UTIL.jamIndonesia(d.timestampClient || '')}
-      ${statusDatang ? `(${statusDatang})` : ''}<br>
+  <div class="summary-card-title">📥 ABSEN DATANG</div>
 
-      <strong>Absen Pulang:</strong>
-      ${UTIL.jamIndonesia(p.timestampClient || '')}
-      ${statusPulang ? `(${statusPulang})` : ''}<br>
+  <div class="summary-info">
+      <div class="summary-thumb">
+          ${fotoDatang ? UI.renderThumbnailFoto(fotoDatang) : ''}
+      </div>
 
-      <strong>Lokasi:</strong> ${lokasi}<br>
+      <div class="summary-content">
+          <strong>Tugas / Dinas:</strong> ${detail || '-'}<br>
+          <strong>Tanggal Tugas:</strong> ${tanggalTugas}<br>
+          <strong>Jam Datang:</strong>
+          ${UTIL.jamIndonesia(d.timestampClient || '')}<br>
+          <strong>Status:</strong> ${statusDatang}
+      </div>
+  </div>
 
-      <strong>Total Jam Kerja:</strong> ${durasi}<br>
+</div>
 
-      <strong>Keterangan:</strong> ${p.keterangan || d.keterangan || 'Selesai'}
-      <br><br>
+<div class="summary-card">
+
+  <div class="summary-card-title">📤 ABSEN PULANG</div>
+
+  <div class="summary-info">
+      <div class="summary-thumb">
+          ${fotoPulang ? UI.renderThumbnailFoto(fotoPulang) : ''}
+      </div>
+
+      <div class="summary-content">
+          <strong>Jam Pulang:</strong>
+          ${UTIL.jamIndonesia(p.timestampClient || '')}<br>
+          <strong>Status:</strong> ${statusPulang}<br>
+          <strong>Lokasi:</strong> ${lokasi}<br>
+          <strong>Total Jam Kerja:</strong> ${durasi}<br>
+          <strong>Keterangan:</strong> ${p.keterangan || d.keterangan || 'Selesai'}
+      </div>
+  </div>
+
+</div>
+
+<br>
+
 <button id="btnTambahDinas" class="btn btn-primary">
-    ➕ Tambah Dinas
+➕ Tambah Dinas
 </button>
-    `;
+
+`;
 
   }
 
@@ -2205,6 +2315,28 @@ console.log("stateHariIni =", STATE.absensiHariIni.status);
 
   }
 
+},
+
+renderThumbnailFoto(foto) {
+  if (!foto) return '';
+
+  let url = foto;
+
+  if (foto.includes('drive.google.com')) {
+    const id = foto.match(/id=([^&]+)/)?.[1];
+    if (id) {
+      url = `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+    }
+  }
+
+  return `
+    <div class="thumbnail-absen">
+      <img
+        src="${url}"
+        class="foto-thumbnail"
+        onclick="UI.previewFoto('${url}')">
+    </div>
+  `;
 },
 
     tampilkanKamera() { this.hide(DOM.formArea); this.hide(DOM.previewArea); this.show(DOM.cameraArea); this.clearStatus(); },
@@ -2821,6 +2953,11 @@ return `
       
       try {
         const res = await API.kirimAbsensi(data);
+        console.log('Response Server:', res);
+        if (res.linkFoto) {
+    data.linkFoto = res.linkFoto;
+}console.log("Data setelah ditambah linkFoto:");
+console.log(JSON.stringify(data, null, 2));
         if (res && res.sukses) {
           const stateLokalLama = STORAGE.ambilAbsensiHariIni();
           let dataTerpadu = {};
